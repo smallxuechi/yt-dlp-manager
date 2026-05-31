@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yt-dlp 下载管理器</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --primary:    #ff6b6b;
+            --primary-glow: rgba(255,107,107,0.35);
+            --secondary:  #4ecdc4;
+            --dark:       #0f0f1a;
+            --surface:    #1a1a2e;
+            --surface2:   #16213e;
+            --light:      #e8eaf0;
+            --muted:      #6b7280;
+            --success:    #2ecc71;
+            --warning:    #f59e0b;
+            --danger:     #ef4444;
+            --border:     rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--dark);
+            min-height: 100vh;
+            color: var(--light);
+            background-image:
+                radial-gradient(ellipse at 20% 20%, rgba(255,107,107,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(78,205,196,0.06) 0%, transparent 50%);
+        }
+
+        /* ── 布局 ───────────────────────────────────────────── */
+        .container { max-width: 960px; margin: 0 auto; padding: 24px 20px; }
+
+        /* ── Header ────────────────────────────────────────── */
+        header { text-align: center; padding: 36px 0 28px; }
+
+        .logo-icon {
+            font-size: 3rem;
+            display: block;
+            margin-bottom: 12px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50%       { transform: translateY(-6px); }
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            background: linear-gradient(120deg, var(--primary) 0%, #ff9f7f 40%, var(--secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle { color: var(--muted); font-size: 0.9rem; }
+
+        /* ── 输入区 ─────────────────────────────────────────── */
+        .input-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .url-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 13px 16px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            background: rgba(0,0,0,0.4);
+            color: var(--light);
+            font-size: 0.95rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        input[type="text"]::placeholder { color: var(--muted); }
+
+        .options-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        select {
+            padding: 10px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            background: rgba(0,0,0,0.4);
+            color: var(--light);
+            font-size: 0.9rem;
+            font-family: inherit;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+
+        select:focus { border-color: var(--secondary); }
+
+        .cookie-hint {
+            font-size: 0.78rem;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+
+        /* Cookies 状态彽章 */
+        .cookie-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .cookie-status.ok {
+            background: rgba(46,204,113,0.12);
+            color: var(--success);
+            border: 1px solid rgba(46,204,113,0.25);
+        }
+
+        .cookie-status.missing {
+            background: rgba(239,68,68,0.12);
+            color: var(--danger);
+            border: 1px solid rgba(239,68,68,0.25);
+        }
+
+        .cookie-status .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* ── 按钮 ───────────────────────────────────────────── */
+        button {
+            padding: 12px 22px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, #ff8e8e 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--primary-glow);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn-danger {
+            background: rgba(239,68,68,0.15);
+            color: var(--danger);
+            border: 1px solid rgba(239,68,68,0.25);
+            padding: 7px 12px;
+            font-size: 0.8rem;
+        }
+
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.07);
+            color: var(--muted);
+            border: 1px solid var(--border);
+            padding: 7px 14px;
+            font-size: 0.8rem;
+        }
+
+        .btn-secondary:hover { background: rgba(255,255,255,0.12); color: var(--light); }
+
+        .btn-warn {
+            background: rgba(245,158,11,0.15);
+            color: var(--warning);
+            border: 1px solid rgba(245,158,11,0.25);
+            padding: 7px 12px;
+            font-size: 0.8rem;
+        }
+
+        .btn-warn:hover { background: rgba(245,158,11,0.25); }
+
+        /* ── 统计栏 ─────────────────────────────────────────── */
+        .stats-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 16px 20px;
+            border-radius: 14px;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+
+        .stat-item:hover { border-color: rgba(255,255,255,0.15); }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-value.pending  { color: var(--warning); }
+        .stat-value.running  { color: var(--secondary); }
+        .stat-value.completed{ color: var(--success); }
+        .stat-value.failed   { color: var(--danger); }
+
+        .stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+
+        /* ── Tabs ───────────────────────────────────────────── */
+        .tabs-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            padding: 9px 20px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 0.88rem;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        .tab:not(.active):hover { color: var(--light); background: rgba(255,255,255,0.1); }
+
+        .tabs-spacer { flex: 1; }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* ── 任务卡片 ───────────────────────────────────────── */
+        .task-list { display: flex; flex-direction: column; gap: 10px; }
+
+        .task-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            animation: slideIn 0.25s ease;
+            transition: border-color 0.2s;
+        }
+
+        .task-card:hover { border-color: rgba(255,255,255,0.14); }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .task-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            flex-shrink: 0;
+        }
+
+        .task-icon.pending   { background: rgba(245,158,11,0.15); }
+        .task-icon.running   { background: rgba(78,205,196,0.15); }
+        .task-icon.completed { background: rgba(46,204,113,0.15); }
+        .task-icon.failed    { background: rgba(239,68,68,0.15); }
+
+        /* 下载中图标旋转动画 */
+        .task-icon.running .spin { display: inline-block; animation: spin 1.2s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .task-info { flex: 1; min-width: 0; }
+
+        .task-url {
+            color: var(--secondary);
+            font-size: 0.88rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .task-meta {
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .task-progress {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            margin-top: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: 'Consolas', monospace;
+        }
+
+        .task-progress.error-text { color: var(--danger); }
+
+        .progress-bar-wrap {
+            height: 3px;
+            background: rgba(255,255,255,0.07);
+            border-radius: 99px;
+            margin-top: 6px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .task-card.running .progress-bar-wrap { display: block; }
+
+        .progress-bar-inner {
+            height: 100%;
+            background: linear-gradient(90deg, var(--secondary), var(--primary));
+            border-radius: 99px;
+            animation: shimmer 1.5s ease-in-out infinite;
+            width: 40%;
+        }
+
+        @keyframes shimmer {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(300%); }
+        }
+
+        .task-status {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+
+        .status-pending   { background: rgba(245,158,11,0.15);  color: var(--warning); }
+        .status-running   { background: rgba(78,205,196,0.15);  color: var(--secondary); }
+        .status-completed { background: rgba(46,204,113,0.15);  color: var(--success); }
+        .status-failed    { background: rgba(239,68,68,0.15);   color: var(--danger); }
+
+        .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+        /* ── 空状态 ─────────────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+        }
+
+        .empty-state .empty-icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.5; }
+        .empty-state p { font-size: 0.9rem; }
+
+        /* ── 历史操作栏 ─────────────────────────────────────── */
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            justify-content: flex-end;
+        }
+
+        /* ── 日志模态框 ─────────────────────────────────────── */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal.active { display: flex; }
+
+        .modal-content {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 0;
+            max-width: 820px;
+            width: 100%;
+            max-height: 82vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title { font-size: 1rem; font-weight: 600; }
+
+        .modal-task-id { font-size: 0.78rem; color: var(--muted); margin-top: 2px; font-family: monospace; }
+
+        .close-btn {
+            background: rgba(255,255,255,0.07);
+            border: none;
+            color: var(--muted);
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: background 0.2s;
+        }
+
+        .close-btn:hover { background: rgba(255,255,255,0.14); color: var(--light); }
+
+        .modal-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+        .log-viewer {
+            flex: 1;
+            background: rgba(0,0,0,0.6);
+            margin: 16px;
+            border-radius: 10px;
+            padding: 16px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }
+
+        .log-viewer::-webkit-scrollbar { width: 6px; }
+        .log-viewer::-webkit-scrollbar-track { background: transparent; }
+        .log-viewer::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+        /* ── 悬浮按钮 ───────────────────────────────────────── */
+        .fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(30,30,50,0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 10px 18px;
+            border-radius: 50px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            color: var(--muted);
+            transition: all 0.2s;
+        }
+
+        .fab:hover { color: var(--light); border-color: rgba(255,255,255,0.2); transform: translateY(-2px); }
+
+        /* ── Cookie 说明框 ──────────────────────────────────── */
+        .cookie-tip {
+            background: rgba(78,205,196,0.07);
+            border: 1px solid rgba(78,205,196,0.2);
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 0.8rem;
+            color: #9ecfcc;
+            margin-top: 10px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            line-height: 1.5;
+        }
+
+        .cookie-tip-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+
+        /* ── 响应式 ─────────────────────────────────────────── */
+        @media (max-width: 600px) {
+
+        /* ── 文件列表样式 ─────────────────────────────────────── */
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .file-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: border-color 0.2s;
+        }
+
+        .file-card:hover { border-color: rgba(255,255,255,0.14); }
+
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(78,205,196,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .file-info { flex: 1; min-width: 0; }
+
+        .file-name {
+            color: var(--light);
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-meta {
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .file-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+        }
+
+        .file-empty .empty-icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.5; }
+            .url-row { flex-direction: column; }
+            .options-row { flex-direction: column; align-items: stretch; }
+            .stats-bar { flex-wrap: wrap; }
+            .stat-item { min-width: calc(50% - 6px); }
+        }
+        /* Settings panel */
+        .settings-section { max-width: 680px; }
+        .settings-title {
+            font-size: 1rem; font-weight: 600;
+            color: var(--light); margin-bottom: 16px;
+        }
+        .settings-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin-bottom: 14px;
+        }
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 6px 0;
+        }
+        .settings-row + .settings-row {
+            border-top: 1px solid var(--border);
+            margin-top: 12px;
+            padding-top: 12px;
+        }
+        .settings-label { flex: 1; }
+        .settings-name { font-size: 0.92rem; font-weight: 500; color: var(--light); }
+        .settings-desc { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
+        .settings-input-num {
+            width: 80px; padding: 8px 12px;
+            border: 1.5px solid var(--border); border-radius: 8px;
+            background: rgba(0,0,0,0.4); color: var(--light);
+            font-size: 0.9rem; text-align: center; outline: none;
+            font-family: inherit;
+        }
+        .settings-input-num:focus { border-color: var(--primary); }
+        .settings-input-text {
+            width: 240px; padding: 8px 12px;
+            border: 1.5px solid var(--border); border-radius: 8px;
+            background: rgba(0,0,0,0.4); color: var(--light);
+            font-size: 0.85rem; outline: none; font-family: inherit;
+        }
+        .settings-input-text:focus { border-color: var(--primary); }
+        /* Toggle switch */
+        .toggle { position: relative; width: 48px; height: 26px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; inset: 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 26px; cursor: pointer;
+            transition: 0.3s; border: 1px solid var(--border);
+        }
+        .toggle-slider::before {
+            content: ""; position: absolute;
+            width: 18px; height: 18px;
+            left: 3px; top: 3px;
+            background: var(--muted); border-radius: 50%; transition: 0.3s;
+        }
+        .toggle input:checked + .toggle-slider {
+            background: rgba(46,204,113,0.25);
+            border-color: var(--success);
+        }
+        .toggle input:checked + .toggle-slider::before {
+            transform: translateX(22px); background: var(--success);
+        }
+        .proxy-url-row { display: none !important; }
+        .proxy-url-row.visible { display: flex !important; }
+        /* Domestic domains */
+        .domestic-domains {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 16px;
+        }
+        .domain-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .domain-tag {
+            background: rgba(78,205,196,0.1);
+            border: 1px solid rgba(78,205,196,0.2);
+            color: var(--secondary);
+            font-size: 0.73rem; padding: 3px 10px;
+            border-radius: 20px; font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <header>
+        <span class="logo-icon">📥</span>
+        <h1>yt-dlp 下载管理器</h1>
+        <p class="subtitle">支持 YouTube、B站、Twitter 等 1000+ 网站</p>
+    </header>
+
+    <!-- 输入区 -->
+    <div class="input-section">
+        <div class="url-row">
+            <input type="text" id="urlInput" placeholder="粘贴视频链接 (YouTube, B站, Twitter...)" />
+            <button class="btn-primary" onclick="addTask()" id="addBtn">⬇ 下载</button>
+        </div>
+        <div class="options-row">
+            <select id="formatSelect">
+                <option value="best">🎬 最佳视频</option>
+                <option value="bestvideo">🎬 最高画质 + 音频</option>
+                <option value="audio">🎵 仅音频 (MP3)</option>
+            </select>
+
+            <select id="cookieSelect">
+                <option value="none">🍪 不使用 Cookies</option>
+                <option value="file">📄 使用 cookies.txt 文件（推荐）</option>
+                <option value="chrome">🌐 从 Chrome 读取</option>
+                <option value="edge">🔷 从 Edge 读取</option>
+                <option value="firefox">🦊 从 Firefox 读取</option>
+                <option value="brave">🦱 从 Brave 读取</option>
+            </select>
+
+            <span id="cookieStatusBadge" style="display:none;"></span>
+        </div>
+
+        <div class="cookie-tip" id="cookieTip">
+            <span class="cookie-tip-icon">🔑</span>
+            <span id="cookieTipText">
+                <strong>关于 Cookies：</strong>YouTube 现在要求登录验证。选择“从 Chrome/Edge 读取”后，yt-dlp 会自动使用你浏览器里的已登录账号 Cookie，无需手动导出任何文件。请确保对应浏览器已登录 YouTube。
+            </span>
+        </div>
+    </div>
+
+    <!-- 统计栏 -->
+    <div class="stats-bar">
+        <div class="stat-item">
+            <div class="stat-value pending" id="pendingCount">0</div>
+            <div class="stat-label">⏳ 等待中</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value running" id="runningCount">0</div>
+            <div class="stat-label">⬇ 下载中</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value completed" id="completedCount">0</div>
+            <div class="stat-label">✅ 已完成</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value failed" id="failedCount">0</div>
+            <div class="stat-label">❌ 失败</div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-row">
+        <button class="tab active" data-tab="tasks" id="tab-tasks">📋 下载队列</button>
+        <button class="tab" data-tab="history" id="tab-history">📚 历史记录</button>
+        <button class="tab" data-tab="files" id="tab-files">📂 文件管理</button>
+        <button class="tab" data-tab="settings" id="tab-settings">⚙️ 设置</button>
+        <div class="tabs-spacer"></div>
+        <button class="btn-warn" onclick="clearFailed()" title="删除所有失败任务">🗑 清除失败</button>
+    </div>
+
+    <!-- 队列面板 -->
+    <div class="panel active" id="tasksPanel">
+        <div class="task-list" id="taskList"></div>
+    </div>
+
+    <!-- 历史面板 -->
+    <div class="panel" id="historyPanel">
+        <div class="toolbar">
+            <button class="btn-secondary" onclick="clearHistory()">🗑 清空历史</button>
+        </div>
+        <div class="task-list" id="historyList"></div>
+    </div>
+
+    <!-- 文件管理面板 -->
+    <div class="panel" id="filesPanel">
+        <div class="toolbar">
+            <button class="btn-secondary" onclick="loadFiles()">🔄 刷新</button>
+            <button class="btn-secondary" onclick="openDownloadsFolder()">📂 打开文件夹</button>
+        </div>
+        <div class="file-list" id="fileList"></div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div class="panel" id="settingsPanel">
+        <div class="settings-section">
+            <div class="settings-title">⚙️ 下载设置</div>
+
+            <div class="settings-card">
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <div class="settings-name">并发分片数</div>
+                        <div class="settings-desc">同时下载的视频分片数，对 YouTube / B站 DASH 流提速明显（1~16）</div>
+                    </div>
+                    <input type="number" id="concurrentFragments" class="settings-input-num" min="1" max="16" value="8">
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <div class="settings-name">启用代理</div>
+                        <div class="settings-desc">国内网站（B站、优酷等）会自动跳过代理，无需手动切换</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="proxyEnabled">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row proxy-url-row" id="proxyUrlRow">
+                    <div class="settings-label">
+                        <div class="settings-name">代理地址</div>
+                        <div class="settings-desc">兼容 v2rayN 融合端口（HTTP / SOCKS5）</div>
+                    </div>
+                    <input type="text" id="proxyUrl" class="settings-input-text" placeholder="http://127.0.0.1:10808">
+                </div>
+            </div>
+
+            <div class="domestic-domains">
+                <div class="settings-name">🇨🇳 以下网站自动跳过代理</div>
+                <div class="domain-tags">
+                    <span class="domain-tag">bilibili.com</span>
+                    <span class="domain-tag">b23.tv</span>
+                    <span class="domain-tag">youku.com</span>
+                    <span class="domain-tag">iqiyi.com</span>
+                    <span class="domain-tag">weibo.com</span>
+                    <span class="domain-tag">douyin.com</span>
+                    <span class="domain-tag">mgtv.com</span>
+                    <span class="domain-tag">v.qq.com</span>
+                    <span class="domain-tag">acfun.cn</span>
+                    <span class="domain-tag">ixigua.com</span>
+                    <span class="domain-tag">huya.com</span>
+                    <span class="domain-tag">douyu.com</span>
+                    <span class="domain-tag">kuaishou.com</span>
+                </div>
+            </div>
+
+            <button class="btn-primary" onclick="saveSettings()" id="saveSettingsBtn">💾 保存设置</button>
+        </div>
+    </div>
+
+</div>
+
+<!-- 日志模态框 -->
+<div class="modal" id="logModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div>
+                <div class="modal-title">📄 下载日志</div>
+                <div class="modal-task-id" id="logTaskId"></div>
+            </div>
+            <button class="close-btn" onclick="closeLogModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="log-viewer" id="logContent">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<!-- 悬浮按钮 -->
+<div class="fab" onclick="openDownloads()">📂 打开下载文件夹</div>
+
+<script>
+    const API_BASE = '';
+    let currentLogTaskId = null;
+    let eventSource = null;
+
+    // ── SSE 实时推送 ────────────────────────────────────────────
+    function initSSE() {
+        if (eventSource) {
+            eventSource.close();
+        }
+        eventSource = new EventSource(API_BASE + '/api/events');
+
+        eventSource.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                handleSSE(data);
+            } catch (err) {
+                console.error('SSE 解析失败:', err);
+            }
+        };
+
+        eventSource.onerror = () => {
+            console.log('SSE 连接断开，3秒后重连...');
+            eventSource.close();
+            eventSource = null;
+            setTimeout(initSSE, 3000);
+        };
+    }
+
+    function handleSSE(data) {
+        if (data.type === 'task_update' || data.type === 'progress') {
+            loadTasks();  // 收到任务更新时刷新界面
+        }
+    }
+
+    // ── Tab 切换 ────────────────────────────────────────────
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            const panelId = tab.dataset.tab + 'Panel';
+            document.getElementById(panelId).classList.add('active');
+
+            if (tab.dataset.tab === 'files') loadFiles();
+            if (tab.dataset.tab === 'settings') loadSettings();
+        });
+    });
+
+    // ── 添加任务 ─────────────────────────────────────────────
+    async function addTask() {
+        const url = document.getElementById('urlInput').value.trim();
+        const format = document.getElementById('formatSelect').value;
+        const cookieBrowser = document.getElementById('cookieSelect').value;
+
+        if (!url) {
+            showToast('请先输入视频链接', 'warn');
+            return;
+        }
+
+        const btn = document.getElementById('addBtn');
+        btn.disabled = true;
+        btn.textContent = '添加中...';
+
+        try {
+            // ✅ 修复：统一使用 application/x-www-form-urlencoded
+            const body = new URLSearchParams({ url, format, cookie_browser: cookieBrowser }).toString();
+            const res = await fetch(API_BASE + '/api/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('urlInput').value = '';
+                showToast('任务已添加！', 'success');
+                await loadTasks();
+                // 切换到队列 Tab
+                document.querySelector('[data-tab="tasks"]').click();
+            } else {
+                showToast('添加失败: ' + (data.error || '未知错误'), 'error');
+            }
+        } catch (e) {
+            showToast('网络错误: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '⬇ 下载';
+        }
+    }
+
+    // ── 加载数据 ─────────────────────────────────────────────
+    async function loadTasks() {
+        try {
+            const [tasksRes, historyRes] = await Promise.all([
+                fetch(API_BASE + '/api/tasks'),
+                fetch(API_BASE + '/api/history')
+            ]);
+            const tasks = await tasksRes.json();
+            const history = await historyRes.json();
+
+            renderTasks(tasks, 'taskList', false);
+            renderTasks(history, 'historyList', true);
+            updateStats(tasks, history);
+
+            // 如果日志模态框打开中，自动刷新日志
+            if (currentLogTaskId && document.getElementById('logModal').classList.contains('active')) {
+                refreshLog(currentLogTaskId);
+            }
+        } catch (e) {
+            console.error('加载数据失败:', e);
+        }
+    }
+
+    // ── 渲染任务列表 ─────────────────────────────────────────
+    function renderTasks(tasks, containerId, isHistory) {
+        const container = document.getElementById(containerId);
+
+        if (tasks.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">${isHistory ? '📚' : '📋'}</div>
+                    <p>${isHistory ? '暂无历史记录' : '暂无下载任务，在上方输入链接开始下载'}</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = tasks.map(task => {
+            const isRunning = task.status === 'running';
+            const isFailed  = task.status === 'failed';
+            const icon = { pending:'⏳', running:'<span class="spin">⬇️</span>', completed:'✅', failed:'❌' }[task.status] || '❓';
+            const progressClass = isFailed ? 'task-progress error-text' : 'task-progress';
+            const progressText = isFailed
+                ? (task.error || task.progress || '下载失败')
+                : (task.progress || getStatusText(task.status));
+
+            return `
+            <div class="task-card ${task.status}">
+                <div class="task-icon ${task.status}">${icon}</div>
+                <div class="task-info">
+                    <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
+                    <div class="task-meta">
+                        ${escapeHtml(task.created_at)}
+                        ${task.format_option ? ' · ' + formatLabel(task.format_option) : ''}
+                        ${task.cookie_browser && task.cookie_browser !== 'none' ? ' · 🍪 ' + task.cookie_browser : ''}
+                    </div>
+                    <div class="${progressClass}">${escapeHtml(progressText)}</div>
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-inner"></div>
+                    </div>
+                </div>
+                <span class="task-status status-${task.status}">${getStatusText(task.status)}</span>
+                <div class="task-actions">
+                    ${(isRunning || isFailed) ? `<button class="btn-secondary" onclick="viewLog('${task.id}')">📄 日志</button>` : ''}
+                    ${!isHistory && task.status !== 'completed'
+                        ? `<button class="btn-danger" onclick="cancelTask('${task.id}')">✕ 取消</button>`
+                        : ''}
+                    ${isHistory
+                        ? `<button class="btn-danger" onclick="deleteHistory('${task.id}')">🗑</button>`
+                        : ''}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // ── 更新统计数字 ─────────────────────────────────────────
+    function updateStats(tasks, history) {
+        document.getElementById('pendingCount').textContent  = tasks.filter(t => t.status === 'pending').length;
+        document.getElementById('runningCount').textContent  = tasks.filter(t => t.status === 'running').length;
+        document.getElementById('completedCount').textContent = history.length;
+        document.getElementById('failedCount').textContent   = tasks.filter(t => t.status === 'failed').length;
+    }
+
+    // ── 取消任务（真正 kill 进程） ────────────────────────────
+    async function cancelTask(id) {
+        if (!confirm('确认取消该下载任务？')) return;
+        // ✅ 修复：使用 URLSearchParams，后端能正确解析
+        const body = new URLSearchParams({ id }).toString();
+        await fetch(API_BASE + '/api/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+        });
+        showToast('任务已取消', 'warn');
+        await loadTasks();
+    }
+
+    // ── 删除历史条目 ─────────────────────────────────────────
+    async function deleteHistory(id) {
+        // ✅ 修复：同上
+        const body = new URLSearchParams({ id }).toString();
+        await fetch(API_BASE + '/api/delete-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+        });
+        await loadTasks();
+    }
+
+    // ── 清空历史 ─────────────────────────────────────────────
+    async function clearHistory() {
+        if (!confirm('确定清空全部历史记录？')) return;
+        await fetch(API_BASE + '/api/clear-history', { method: 'POST' });
+        showToast('历史已清空', 'success');
+        await loadTasks();
+    }
+
+    // ── 清除所有失败任务（新增） ─────────────────────────────
+    async function clearFailed() {
+        if (!confirm('删除所有失败的任务？')) return;
+        await fetch(API_BASE + '/api/clear-failed', { method: 'POST' });
+        showToast('失败任务已清除', 'success');
+        await loadTasks();
+    }
+
+    // ── 查看日志 ─────────────────────────────────────────────
+    // ✅ 修复：失败任务也可以查看日志
+    async function viewLog(id) {
+        currentLogTaskId = id;
+        document.getElementById('logTaskId').textContent = 'Task ID: ' + id;
+        document.getElementById('logModal').classList.add('active');
+        await refreshLog(id);
+    }
+
+    async function refreshLog(id) {
+        try {
+            const res = await fetch(API_BASE + '/api/logs?id=' + id);
+            if (!res.ok) {
+                document.getElementById('logContent').textContent = '日志文件不存在或尚未生成';
+                return;
+            }
+            const text = await res.text();
+            const viewer = document.getElementById('logContent');
+            const isAtBottom = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight < 80;
+            viewer.textContent = text || '暂无日志内容';
+            // 仅在接近底部时才自动滚动
+            if (isAtBottom) {
+                viewer.scrollTop = viewer.scrollHeight;
+            }
+        } catch (e) {
+            document.getElementById('logContent').textContent = '加载日志失败: ' + e.message;
+        }
+    }
+
+    function closeLogModal() {
+        document.getElementById('logModal').classList.remove('active');
+        currentLogTaskId = null;
+    }
+
+    // ESC 关闭模态框
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeLogModal();
+    });
+
+    // 点击遮罩关闭
+    document.getElementById('logModal').addEventListener('click', function(e) {
+        if (e.target === this) closeLogModal();
+    });
+
+    // ── 打开下载文件夹 ───────────────────────────────────────
+    function openDownloads() {
+        window.open('downloads/', '_blank');
+    }
+
+    // ── 工具函数 ─────────────────────────────────────────────
+    function getStatusText(status) {
+        return { pending:'等待中', running:'下载中', completed:'已完成', failed:'失败' }[status] || status;
+    }
+
+    function formatLabel(fmt) {
+        return { best:'最佳视频', bestvideo:'最高画质', audio:'仅音频' }[fmt] || fmt;
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ── 轻量 Toast 提示 ──────────────────────────────────────
+    function showToast(msg, type = 'info') {
+        const existing = document.getElementById('_toast');
+        if (existing) existing.remove();
+
+        const colors = { success:'#2ecc71', warn:'#f59e0b', error:'#ef4444', info:'#4ecdc4' };
+        const toast = document.createElement('div');
+        toast.id = '_toast';
+        toast.textContent = msg;
+        Object.assign(toast.style, {
+            position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+            background: colors[type] || colors.info,
+            color: '#fff', fontWeight: '600', fontSize: '0.85rem',
+            padding: '10px 22px', borderRadius: '50px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+            zIndex: '9999', opacity: '0',
+            transition: 'opacity 0.2s', fontFamily: 'Inter, sans-serif',
+        });
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.style.opacity = '1');
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, 2500);
+    }
+
+    // ── 回车提交 ─────────────────────────────────────────────
+    document.getElementById('urlInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') addTask();
+    });
+
+    // ── Cookie 文件状态检测 ───────────────────────────────────
+    let cookiesFileExists = false;
+
+    async function checkCookiesFile() {
+        try {
+            const res = await fetch(API_BASE + '/api/check-cookies');
+            const data = await res.json();
+            cookiesFileExists = data.exists;
+            updateCookieUI(document.getElementById('cookieSelect').value, data.filename);
+        } catch (e) {
+            // 接口不可用时静默处理
+        }
+    }
+
+    function updateCookieUI(val, filename = null) {
+        const badge = document.getElementById('cookieStatusBadge');
+        const tipText = document.getElementById('cookieTipText');
+
+        if (val === 'file') {
+            // 显示状态徽章
+            badge.style.display = 'inline-flex';
+            if (cookiesFileExists) {
+                const displayName = filename || 'cookies.txt';
+                badge.className = 'cookie-status ok';
+                badge.innerHTML = `<span class="dot"></span>${displayName} 已就绪`;
+                tipText.innerHTML = `
+                    <strong>✅ 已识别到 cookies 文件！</strong>
+                    检测到：<code>${displayName}</code>，直接点击下载即可。
+                    <br><small style="color:var(--muted);margin-top:4px;display:block;">
+                    💡 如需更新：重新用插件导出并覆盖 <code>tools\\</code> 目录中的文件
+                    </small>`;
+            } else {
+                badge.className = 'cookie-status missing';
+                badge.innerHTML = '<span class="dot"></span>未找到 cookies 文件';
+                tipText.innerHTML = `
+                    <strong>📋 使用步骤：</strong>
+                    <ol style="margin:6px 0 0 16px;line-height:1.8;">
+                        <li>打开浏览器，前往 <strong>youtube.com</strong> 并确保已登录</li>
+                        <li>点击浏览器工具栏中的 <strong>Get cookies.txt LOCALLY</strong> 插件图标</li>
+                        <li>点击 <strong>Export</strong>，保存文件（无需改名）</li>
+                        <li>将文件放入 <code>tools\</code> 目录即可（支持 <code>www.youtube.com_cookies.txt</code> 等命名）</li>
+                        <li>刷新此页面，状态变绿后即可下载</li>
+                    </ol>`;
+            }
+        } else {
+            badge.style.display = 'none';
+            // 恢复通用提示
+            if (val === 'none') {
+                tipText.innerHTML = '<strong>提示：</strong>不使用 Cookies 下载 YouTube 视频可能触发机器人验证，建议选择 cookies.txt 方式。';
+            } else {
+                tipText.innerHTML = `<strong>关于从浏览器读取：</strong>yt-dlp 会自动读取 ${val} 浏览器的已登录 Cookie。<br>
+                    ⚠️ <strong>Chrome / Edge 用户注意</strong>：新版浏览器（127+）加密方式有变，若失败请改用"cookies.txt 文件"方式。`;
+            }
+        }
+    }
+
+    // 监听 Cookie 方式切换
+    document.getElementById('cookieSelect').addEventListener('change', function() {
+        updateCookieUI(this.value);
+    });
+
+    // ── 初始化 ───────────────────────────────────────────────
+    loadTasks();
+    loadFiles();
+    checkCookiesFile();  // 检测 cookies.txt 是否存在
+    initSSE();  // 启动 SSE 实时推送
+
+    // ── 文件管理函数 ─────────────────────────────────────────
+    async function loadFiles() {
+        try {
+            const res = await fetch(API_BASE + '/api/files');
+            const files = await res.json();
+            renderFiles(files);
+        } catch (e) {
+            console.error('加载文件列表失败:', e);
+        }
+    }
+
+    function renderFiles(files) {
+        const container = document.getElementById('fileList');
+        if (files.length === 0) {
+            container.innerHTML = `
+                <div class="file-empty">
+                    <div class="empty-icon">📂</div>
+                    <p>暂无已下载文件</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = files.map(file => `
+            <div class="file-card">
+                <div class="file-icon">🎬</div>
+                <div class="file-info">
+                    <div class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+                    <div class="file-meta">${file.size_display} · ${file.modified}</div>
+                </div>
+                <div class="file-actions">
+                    <button class="btn-secondary" onclick="playFile('${escapeHtml(file.name)}')" title="播放">▶</button>
+                    <button class="btn-secondary" onclick="renameFile('${escapeHtml(file.name)}')" title="重命名">✏️</button>
+                    <button class="btn-danger" onclick="deleteFile('${escapeHtml(file.name)}')" title="删除">🗑</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function playFile(name) {
+        const body = new URLSearchParams({ name }).toString();
+        await fetch(API_BASE + '/api/files/open', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+        });
+    }
+
+    async function renameFile(oldName) {
+        const newName = prompt('请输入新文件名:', oldName);
+        if (!newName || newName === oldName) return;
+
+        const body = new URLSearchParams({ old_name: oldName, new_name: newName }).toString();
+        try {
+            const res = await fetch(API_BASE + '/api/files/rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('重命名成功', 'success');
+                loadFiles();
+            } else {
+                showToast('重命名失败: ' + (data.error || '未知错误'), 'error');
+            }
+        } catch (e) {
+            showToast('重命名失败: ' + e.message, 'error');
+        }
+    }
+
+    async function deleteFile(name) {
+        if (!confirm('确认删除文件 "' + name + '"？此操作不可恢复！')) return;
+
+        const body = new URLSearchParams({ name }).toString();
+        try {
+            const res = await fetch(API_BASE + '/api/files/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('文件已删除', 'success');
+                loadFiles();
+            } else {
+                showToast('删除失败: ' + (data.error || '未知错误'), 'error');
+            }
+        } catch (e) {
+            showToast('删除失败: ' + e.message, 'error');
+        }
+    }
+
+    function openDownloadsFolder() {
+        window.open('downloads/', '_blank');
+    }
+
+    // ── 设置 ─────────────────────────────────────────────────
+    async function loadSettings() {
+        try {
+            const res = await fetch(API_BASE + '/api/settings');
+            const s = await res.json();
+            document.getElementById('concurrentFragments').value = s.concurrent_fragments ?? 8;
+            document.getElementById('proxyEnabled').checked = s.proxy_enabled ?? false;
+            document.getElementById('proxyUrl').value = s.proxy_url ?? 'http://127.0.0.1:10808';
+            toggleProxyUrlRow(s.proxy_enabled);
+        } catch (e) {
+            console.error('加载设置失败:', e);
+        }
+    }
+
+    function toggleProxyUrlRow(enabled) {
+        const row = document.getElementById('proxyUrlRow');
+        if (enabled) row.classList.add('visible');
+        else row.classList.remove('visible');
+    }
+
+    document.getElementById('proxyEnabled').addEventListener('change', function() {
+        toggleProxyUrlRow(this.checked);
+    });
+
+    async function saveSettings() {
+        const btn = document.getElementById('saveSettingsBtn');
+        btn.disabled = true;
+        btn.textContent = '保存中...';
+        try {
+            const body = new URLSearchParams({
+                proxy_enabled: document.getElementById('proxyEnabled').checked,
+                proxy_url: document.getElementById('proxyUrl').value || 'http://127.0.0.1:10808',
+                concurrent_fragments: document.getElementById('concurrentFragments').value || 8,
+            }).toString();
+            const res = await fetch(API_BASE + '/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            const data = await res.json();
+            if (data.success) showToast('设置已保存 ✓', 'success');
+            else showToast('保存失败: ' + (data.error || ''), 'error');
+        } catch (e) {
+            showToast('保存失败: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '💾 保存设置';
+        }
+    }
+
+</script>
+</body>
+</html>

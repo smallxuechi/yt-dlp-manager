@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# 工具二进制（体积大，用户自行下载）
+tools/yt-dlp.exe
+tools/ffmpeg.exe
+tools/ffprobe.exe
+
+# Cookies（含隐私信息，绝不上传）
+tools/*.txt
+tools/cookies*
+
+# 下载和日志（运行时产生）
+downloads/
+logs/
+
+# 数据和设置（本地运行状态）
+data.json
+settings.json
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.claude/
+.vscode/
+.idea/
