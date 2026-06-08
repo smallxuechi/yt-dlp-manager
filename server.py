@@ -11,6 +11,8 @@ import threading
 import time
 import uuid
 import logging
+import re
+from logging.handlers import RotatingFileHandler
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
@@ -22,11 +24,38 @@ if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ── 日志配置 ──────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+# 路径配置（提前定义，供日志配置使用）
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+
+# 创建日志目录
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+# 配置根日志记录器：同时输出到控制台和文件（带轮转）
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# 清空现有处理器
+root_logger.handlers.clear()
+
+# 控制台处理器
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+console_handler.setFormatter(console_formatter)
+root_logger.addHandler(console_handler)
+
+# 文件处理器（带轮转：最大 5MB，保留 3 个备份）
+file_handler = RotatingFileHandler(
+    os.path.join(LOGS_DIR, "server.log"),
+    maxBytes=5 * 1024 * 1024,  # 5MB
+    backupCount=3,
+    encoding="utf-8"
 )
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(console_formatter)
+root_logger.addHandler(file_handler)
+
 logger = logging.getLogger(__name__)
 
 # ── SSE 客户端管理 ─────────────────────────────────────────────────────────────
@@ -53,10 +82,8 @@ def broadcast_sse(message: dict) -> None:
                 pass  # 忽略发送失败的客户端
 
 # ── 路径配置 ──────────────────────────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
-LOGS_DIR = os.path.join(BASE_DIR, "logs")
 DATA_FILE = os.path.join(BASE_DIR, "data.json")
 SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
 COOKIES_FILE = os.path.join(TOOLS_DIR, "cookies.txt")  # 默认路径，也会自动查找其他名称
@@ -105,8 +132,9 @@ def find_cookies_file() -> str | None:
 YTDLP_EXE = os.path.join(TOOLS_DIR, "yt-dlp.exe")
 FFMPEG_EXE = os.path.join(TOOLS_DIR, "ffmpeg.exe")
 
-for d in [DOWNLOADS_DIR, LOGS_DIR]:
-    os.makedirs(d, exist_ok=True)
+# 确保目录存在（日志目录已在日志配置中创建）
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+os.makedirs(TOOLS_DIR, exist_ok=True)
 
 # ── 并发控制 ──────────────────────────────────────────────────────────────────
 # 用字典追踪正在运行的进程，key = task_id，value = Popen 对象
@@ -165,6 +193,7 @@ DEFAULT_SETTINGS: dict = {
     "proxy_enabled": False,
     "proxy_url": "http://127.0.0.1:10808",
     "concurrent_fragments": 8,
+    "server_port": 8080,
 }
 
 
@@ -228,12 +257,14 @@ class DownloadTask:
         format_option: str = "best",
         filename_template: str = "%(title)s.%(ext)s",
         cookie_browser: str = "",
+        download_playlist: bool = False,
     ):
         self.id = str(uuid.uuid4())[:8]
         self.url = url
         self.format_option = format_option
         self.filename_template = filename_template
         self.cookie_browser = cookie_browser  # 新增：cookies 来源浏览器
+        self.download_playlist = download_playlist  # 新增：是否下载播放列表
         self.status = "pending"
         self.progress = ""
         self.output_path = ""
@@ -247,6 +278,7 @@ class DownloadTask:
             "format_option": self.format_option,
             "filename_template": self.filename_template,
             "cookie_browser": self.cookie_browser,
+            "download_playlist": self.download_playlist,
             "status": self.status,
             "progress": self.progress,
             "output_path": self.output_path,
@@ -262,6 +294,7 @@ def run_download(
     format_option: str,
     filename_template: str,
     cookie_browser: str,
+    download_playlist: bool = False,
 ) -> None:
     """在独立线程中运行 yt-dlp 下载，结束后更新状态。"""
 
@@ -286,7 +319,6 @@ def run_download(
         "-o", output_template,
         "--newline",
         "--progress",
-        "--no-playlist",
         "--ffmpeg-location", TOOLS_DIR,  # 指定本地 ffmpeg 目录
         # ── YouTube n 参数反爬求解 ────────────────────────────────
         # Node.js 已安装，用它来解密 YouTube 的 n 参数混淆
@@ -294,6 +326,10 @@ def run_download(
         # 允许 yt-dlp 自动下载 EJS 求解器脚本（仅首次需要网络）
         "--remote-components", "ejs:github",
     ]
+
+    # 播放列表支持：如果不勾选下载播放列表，则使用 --no-playlist
+    if not download_playlist:
+        cmd.append("--no-playlist")
 
     # 并发分片加速（对 YouTube/B站 DASH 格式效果显著）
     settings = load_settings()
@@ -354,6 +390,43 @@ def run_download(
                 if stripped:
                     # 内存缓存最新进度
                     progress_cache[task_id] = stripped[:200]
+
+                    # 解析速度和剩余时间
+                    speed = None
+                    eta = None
+                    
+                    # yt-dlp 进度格式示例：
+                    # [download]  45.2% of  123.45MiB at  543.21KiB/s ETA 00:12
+                    # [download]  100% of   12.34MiB in 00:00:23 at 543.21KiB/s
+                    
+                    # 匹配速度 (KiB/s, MiB/s, GiB/s)
+                    speed_match = re.search(r'at\s+([\d.]+)\s*(KiB/s|MiB/s|GiB/s)', stripped)
+                    if speed_match:
+                        speed = f"{speed_match.group(1)}{speed_match.group(2)}"
+                    
+                    # 匹配剩余时间 (ETA HH:MM 或 ETA MM:SS)
+                    eta_match = re.search(r'ETA\s+(\d{2}:\d{2}(?::\d{2})?)', stripped)
+                    if eta_match:
+                        eta = eta_match.group(1)
+                    
+                    # 如果有解析到的数据，更新任务并广播
+                    if speed or eta:
+                        with data_lock:
+                            d = load_data()
+                            t = next((x for x in d["tasks"] if x["id"] == task_id), None)
+                            if t:
+                                if speed:
+                                    t["speed"] = speed
+                                if eta:
+                                    t["eta"] = eta
+                                save_data(d)
+                                broadcast_sse({
+                                    "type": "progress",
+                                    "task_id": task_id,
+                                    "progress": progress_cache.get(task_id, ""),
+                                    "speed": speed,
+                                    "eta": eta
+                                })
 
                 line_count += 1
                 # ✅ 修复：每 15 行才写一次磁盘，避免频繁 IO 与竞争条件
@@ -536,12 +609,13 @@ class Handler(SimpleHTTPRequestHandler):
             url = params.get("url", [""])[0].strip()
             format_option = params.get("format", ["best"])[0]
             cookie_browser = params.get("cookie_browser", ["none"])[0]
+            download_playlist = params.get("download_playlist", ["false"])[0].lower() == "true"
 
             if not url:
                 self.send_json({"success": False, "error": "URL 不能为空"})
                 return
 
-            task = DownloadTask(url, format_option, cookie_browser=cookie_browser)
+            task = DownloadTask(url, format_option, cookie_browser=cookie_browser, download_playlist=download_playlist)
 
             with data_lock:
                 data = load_data()
@@ -550,7 +624,7 @@ class Handler(SimpleHTTPRequestHandler):
 
             thread = threading.Thread(
                 target=run_download,
-                args=(task.id, url, format_option, task.filename_template, cookie_browser),
+                args=(task.id, url, format_option, task.filename_template, cookie_browser, download_playlist),
                 daemon=True,
             )
             thread.start()
@@ -665,10 +739,12 @@ class Handler(SimpleHTTPRequestHandler):
                 proxy_enabled = params.get("proxy_enabled", ["false"])[0].lower() == "true"
                 proxy_url_val = params.get("proxy_url", ["http://127.0.0.1:10808"])[0].strip()
                 concurrent_fragments = max(1, min(16, int(params.get("concurrent_fragments", ["8"])[0])))
+                server_port = max(1024, min(65535, int(params.get("server_port", ["8080"])[0])))
                 new_settings = {
                     "proxy_enabled": proxy_enabled,
                     "proxy_url": proxy_url_val,
                     "concurrent_fragments": concurrent_fragments,
+                    "server_port": server_port,
                 }
                 save_settings(new_settings)
                 logger.info(f"设置已更新: {new_settings}")
@@ -725,7 +801,9 @@ class Handler(SimpleHTTPRequestHandler):
 
 # ── 启动入口 ──────────────────────────────────────────────────────────────────
 def main() -> None:
-    port = 8080
+    # 从设置文件读取端口配置
+    settings = load_settings()
+    port = settings.get("server_port", 8080)
 
     # 启动时清理残留的 running 状态（服务器重启后进程已不存在）
     with data_lock:
